@@ -1,57 +1,71 @@
-import { useState } from "react";
 import { useLocation } from "wouter";
 import { Button } from "@/components/ui/button";
-import { Plus } from "lucide-react";
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuSeparator,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu";
+import { Plus, Menu, Settings, User } from "lucide-react";
+import { useQuery, useMutation } from "@tanstack/react-query";
+import { queryClient, apiRequest } from "@/lib/queryClient";
+import { useToast } from "@/hooks/use-toast";
 import DeckCard from "@/components/DeckCard";
 import CreateDeckModal from "@/components/CreateDeckModal";
 import EmptyState from "@/components/EmptyState";
+import { ThemeToggle } from "@/components/ThemeToggle";
+import { useState } from "react";
 import type { Deck, InsertDeck, InsertFlashcard } from "@shared/schema";
 
 export default function HomePage() {
   const [, setLocation] = useLocation();
   const [isCreateModalOpen, setIsCreateModalOpen] = useState(false);
-  
-  // todo: remove mock functionality - replace with actual data from backend
-  const [decks, setDecks] = useState<Deck[]>([
-    {
-      id: "1",
-      title: "Biology Final Exam",
-      description: "Key concepts for cellular biology, genetics, and evolution",
-      cardCount: 45,
+  const { toast } = useToast();
+
+  const { data: decks = [], isLoading } = useQuery({
+    queryKey: ["/api/decks"],
+  });
+
+  const createDeckMutation = useMutation({
+    mutationFn: async (data: { deck: InsertDeck; cards: Omit<InsertFlashcard, "deckId">[] }) => {
+      const deckRes = await apiRequest("POST", "/api/decks", data.deck);
+      const deck = await deckRes.json() as Deck;
+
+      for (const card of data.cards) {
+        await apiRequest("POST", "/api/flashcards", {
+          ...card,
+          deckId: deck.id,
+        });
+      }
+
+      return deck;
     },
-    {
-      id: "2",
-      title: "Spanish Vocabulary",
-      description: "Common phrases and words for everyday conversation",
-      cardCount: 120,
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["/api/decks"] });
+      toast({
+        title: "Success",
+        description: "Deck created successfully",
+      });
     },
-    {
-      id: "3",
-      title: "World History",
-      description: "Important dates and events from ancient civilizations to modern times",
-      cardCount: 78,
+    onError: () => {
+      toast({
+        title: "Error",
+        description: "Failed to create deck",
+        variant: "destructive",
+      });
     },
-  ]);
+  });
 
   const handleCreateDeck = (
     deck: InsertDeck,
     cards: Omit<InsertFlashcard, "deckId">[]
   ) => {
-    // todo: remove mock functionality - implement actual backend call
-    const newDeck: Deck = {
-      id: `deck-${Date.now()}`,
-      title: deck.title,
-      description: deck.description || null,
-      cardCount: cards.length,
-    };
-    setDecks([newDeck, ...decks]);
-    console.log("Created deck:", deck, "with cards:", cards);
+    createDeckMutation.mutate({ deck, cards });
   };
 
   const handleStudy = (deckId: string) => {
-    // todo: remove mock functionality - navigate to actual deck
-    console.log("Study deck:", deckId);
-    setLocation("/study");
+    setLocation(`/study/${deckId}`);
   };
 
   return (
@@ -66,18 +80,59 @@ export default function HomePage() {
               Study smarter with swipeable flashcards
             </p>
           </div>
-          <Button
-            onClick={() => setIsCreateModalOpen(true)}
-            data-testid="button-create-deck"
-          >
-            <Plus className="w-4 h-4 mr-2" />
-            Create Deck
-          </Button>
+
+          <div className="flex items-center gap-2">
+            <ThemeToggle />
+            
+            <DropdownMenu>
+              <DropdownMenuTrigger asChild>
+                <Button variant="ghost" size="icon" data-testid="button-menu">
+                  <Menu className="w-5 h-5" />
+                </Button>
+              </DropdownMenuTrigger>
+              <DropdownMenuContent align="end">
+                <DropdownMenuItem
+                  onClick={() => setLocation("/profile")}
+                  data-testid="menu-profile"
+                >
+                  <User className="w-4 h-4 mr-2" />
+                  Profile
+                </DropdownMenuItem>
+                <DropdownMenuItem
+                  onClick={() => setLocation("/settings")}
+                  data-testid="menu-settings"
+                >
+                  <Settings className="w-4 h-4 mr-2" />
+                  Settings
+                </DropdownMenuItem>
+                <DropdownMenuSeparator />
+                <DropdownMenuItem
+                  onClick={() => setIsCreateModalOpen(true)}
+                  data-testid="menu-create-deck"
+                >
+                  <Plus className="w-4 h-4 mr-2" />
+                  Create Deck
+                </DropdownMenuItem>
+              </DropdownMenuContent>
+            </DropdownMenu>
+
+            <Button
+              onClick={() => setIsCreateModalOpen(true)}
+              data-testid="button-create-deck"
+            >
+              <Plus className="w-4 h-4 mr-2" />
+              Create Deck
+            </Button>
+          </div>
         </div>
       </header>
 
       <main className="max-w-7xl mx-auto p-6">
-        {decks.length === 0 ? (
+        {isLoading ? (
+          <div className="text-center py-12">
+            <p className="text-muted-foreground">Loading decks...</p>
+          </div>
+        ) : decks.length === 0 ? (
           <div className="mt-16">
             <EmptyState
               type="decks"

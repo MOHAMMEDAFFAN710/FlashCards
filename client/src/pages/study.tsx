@@ -1,64 +1,69 @@
 import { useState } from "react";
-import { useLocation } from "wouter";
+import { useLocation, useParams } from "wouter";
 import { Button } from "@/components/ui/button";
 import { ArrowLeft, RotateCcw } from "lucide-react";
+import { useQuery } from "@tanstack/react-query";
 import CardStack from "@/components/CardStack";
 import ProgressBar from "@/components/ProgressBar";
 import EmptyState from "@/components/EmptyState";
-import type { Flashcard } from "@shared/schema";
+import type { Deck, Flashcard } from "@shared/schema";
 
 export default function StudyPage() {
   const [, setLocation] = useLocation();
+  const params = useParams<{ deckId: string }>();
+  const deckId = params.deckId;
+
   const [currentIndex, setCurrentIndex] = useState(0);
   const [isComplete, setIsComplete] = useState(false);
 
-  // todo: remove mock functionality - replace with actual deck data from backend
-  const mockCards: Flashcard[] = [
-    {
-      id: "1",
-      deckId: "deck-1",
-      front: "What is the capital of France?",
-      back: "Paris - a major European city known for the Eiffel Tower, world-class museums like the Louvre, and its rich cultural heritage.",
-      order: 0,
+  const { data: deck } = useQuery<Deck>({
+    queryKey: ["/api/decks", deckId],
+    queryFn: async () => {
+      const res = await fetch(`/api/decks/${deckId}`);
+      if (!res.ok) throw new Error("Failed to fetch deck");
+      return res.json();
     },
-    {
-      id: "2",
-      deckId: "deck-1",
-      front: "What is photosynthesis?",
-      back: "The process by which plants convert light energy into chemical energy (glucose) using carbon dioxide and water, releasing oxygen as a byproduct.",
-      order: 1,
-    },
-    {
-      id: "3",
-      deckId: "deck-1",
-      front: "Who wrote Romeo and Juliet?",
-      back: "William Shakespeare, an English playwright and poet from the late 16th century, considered one of the greatest writers in the English language.",
-      order: 2,
-    },
-    {
-      id: "4",
-      deckId: "deck-1",
-      front: "What is the Pythagorean theorem?",
-      back: "a² + b² = c² - In a right triangle, the square of the hypotenuse equals the sum of squares of the other two sides.",
-      order: 3,
-    },
-    {
-      id: "5",
-      deckId: "deck-1",
-      front: "What is the periodic table?",
-      back: "A tabular arrangement of chemical elements organized by atomic number, electron configuration, and recurring chemical properties.",
-      order: 4,
-    },
-  ];
+    enabled: !!deckId,
+  });
 
-  const deckTitle = "Biology Final Exam"; // todo: remove mock functionality
+  const { data: flashcards = [], isLoading } = useQuery<Flashcard[]>({
+    queryKey: ["/api/decks", deckId, "flashcards"],
+    queryFn: async () => {
+      const res = await fetch(`/api/decks/${deckId}/flashcards`);
+      if (!res.ok) throw new Error("Failed to fetch flashcards");
+      return res.json();
+    },
+    enabled: !!deckId,
+  });
 
   const handleRestart = () => {
     setCurrentIndex(0);
     setIsComplete(false);
   };
 
-  if (mockCards.length === 0) {
+  if (!deckId) {
+    return (
+      <div className="min-h-screen flex items-center justify-center bg-background">
+        <div className="text-center">
+          <p className="text-muted-foreground mb-4">Deck not found</p>
+          <Button onClick={() => setLocation("/")}>
+            <ArrowLeft className="w-4 h-4 mr-2" />
+            Back to Decks
+          </Button>
+        </div>
+      </div>
+    );
+  }
+
+  if (isLoading) {
+    return (
+      <div className="min-h-screen flex items-center justify-center bg-background">
+        <p className="text-muted-foreground">Loading flashcards...</p>
+      </div>
+    );
+  }
+
+  if (flashcards.length === 0) {
     return (
       <div className="min-h-screen flex flex-col bg-background">
         <header className="p-6 border-b">
@@ -91,7 +96,7 @@ export default function StudyPage() {
             Back
           </Button>
           <h1 className="text-xl font-semibold flex-1 text-center truncate" data-testid="text-deck-title">
-            {deckTitle}
+            {deck?.title || "Study Session"}
           </h1>
           <div className="w-24" />
         </div>
@@ -117,7 +122,7 @@ export default function StudyPage() {
             </div>
             <h2 className="text-2xl font-semibold mb-2">Deck Complete!</h2>
             <p className="text-muted-foreground mb-6">
-              You've reviewed all {mockCards.length} cards in this deck.
+              You've reviewed all {flashcards.length} cards in this deck.
             </p>
             <div className="flex gap-3 justify-center">
               <Button
@@ -139,11 +144,11 @@ export default function StudyPage() {
         ) : (
           <div className="w-full max-w-4xl space-y-8">
             <div className="max-w-2xl mx-auto">
-              <ProgressBar current={currentIndex} total={mockCards.length} />
+              <ProgressBar current={currentIndex} total={flashcards.length} />
             </div>
 
             <CardStack
-              cards={mockCards}
+              cards={flashcards}
               onComplete={() => setIsComplete(true)}
             />
 
