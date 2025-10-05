@@ -23,7 +23,7 @@ export default function HomePage() {
   const [isCreateModalOpen, setIsCreateModalOpen] = useState(false);
   const { toast } = useToast();
 
-  const { data: decks = [], isLoading } = useQuery({
+  const { data: decks = [], isLoading } = useQuery<Deck[]>({
     queryKey: ["/api/decks"],
   });
 
